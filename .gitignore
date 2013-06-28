@@ -1,0 +1,7 @@
+*~
+*.org
+*.sh
+!test.sh
+src/launchpad.net/
+pkg/
+*.test
