@@ -6,16 +6,14 @@ import (
 	. "launchpad.net/gocheck"
 	"net"
 	"net/http"
-	"testing"
 	"time"
 )
 
-func Test(t *testing.T) { TestingT(t) }
+type ErrplaneCollectorApiSuite struct{}
 
-type ErrplaneApiSuite struct{}
+var _ = Suite(&ErrplaneCollectorApiSuite{})
 
 var (
-	_           = Suite(&ErrplaneApiSuite{})
 	recorder    *HttpRequestRecorder
 	listener    net.Listener
 	currentTime time.Time
@@ -30,7 +28,7 @@ func (self *HttpRequestRecorder) ServeHTTP(writer http.ResponseWriter, req *http
 	self.requests = append(self.requests, data)
 }
 
-func (s *ErrplaneApiSuite) SetUpSuite(c *C) {
+func (s *ErrplaneCollectorApiSuite) SetUpSuite(c *C) {
 	var err error
 	listener, err = net.Listen("tcp4", "")
 	c.Assert(err, IsNil)
@@ -41,12 +39,12 @@ func (s *ErrplaneApiSuite) SetUpSuite(c *C) {
 	currentTime = time.Now()
 }
 
-func (s *ErrplaneApiSuite) TearDownSuite(c *C) {
+func (s *ErrplaneCollectorApiSuite) TearDownSuite(c *C) {
 	listener.Close()
 }
 
-func (s *ErrplaneApiSuite) TestApi(c *C) {
-	ep := newTestClient(listener.Addr().(*net.TCPAddr).String(), "app4you2love", "staging", "some_key")
+func (s *ErrplaneCollectorApiSuite) TestApi(c *C) {
+	ep := newTestClient(listener.Addr().(*net.TCPAddr).String(), "", "app4you2love", "staging", "some_key")
 	c.Assert(ep, NotNil)
 
 	ep.Report("some_metric", 123.4, currentTime, "some_context", Dimensions{

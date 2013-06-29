@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 )
@@ -12,31 +13,38 @@ type Point map[string]interface{}
 type Points []Point
 type Metric map[string]interface{}
 type Metrics []Metric
+type UdpPayload map[string]interface{}
 type Dimensions map[string]string
 
 type Errplane struct {
-	url     string
-	apiKey  string
-	Timeout time.Duration
+	url      string
+	apiKey   string
+	database string
+	udpHost  string
+	Timeout  time.Duration
 }
 
-func New(host, app, environment, apiKey string) *Errplane {
-	return newCommon("https", host, app, environment, apiKey)
+func New(httpHost, udpHost, app, environment, apiKey string) *Errplane {
+	return newCommon("https", httpHost, udpHost, app, environment, apiKey)
 }
 
-func newTestClient(host, app, environment, apiKey string) *Errplane {
-	return newCommon("http", host, app, environment, apiKey)
+func newTestClient(httpHost, udpHost, app, environment, apiKey string) *Errplane {
+	return newCommon("http", httpHost, udpHost, app, environment, apiKey)
 }
 
-func newCommon(proto, host, app, environment, apiKey string) *Errplane {
+func newCommon(proto, httpHost, udpHost, app, environment, apiKey string) *Errplane {
+	database := fmt.Sprintf("%s%s", app, environment)
 	return &Errplane{
-		url:     fmt.Sprintf("%s://%s/databases/%s%s/write_keys", proto, host, app, environment),
-		apiKey:  apiKey,
-		Timeout: 1 * time.Second,
+		database: database,
+		url:      fmt.Sprintf("%s://%s/databases/%s/write_keys", proto, httpHost, database),
+		udpHost:  udpHost,
+		apiKey:   apiKey,
+		Timeout:  1 * time.Second,
 	}
 }
 
-func (self *Errplane) Report(metric string, value float64, timestamp time.Time, context string, dimensions Dimensions) error {
+func (self *Errplane) Report(metric string, value float64, timestamp time.Time,
+	context string, dimensions Dimensions) error {
 	data := Metrics{
 		Metric{
 			"n": metric,
@@ -62,4 +70,54 @@ func (self *Errplane) Report(metric string, value float64, timestamp time.Time, 
 		return fmt.Errorf("Server returned status code %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func (self *Errplane) sendUdpPayload(metricType, metric string, value float64, context string, dimensions Dimensions) error {
+	localAddr, err := net.ResolveUDPAddr("udp4", "")
+	if err != nil {
+		return err
+	}
+	remoteAddr, err := net.ResolveUDPAddr("udp4", self.udpHost)
+	if err != nil {
+		return err
+	}
+	udpConn, err := net.DialUDP("udp4", localAddr, remoteAddr)
+	if err != nil {
+		return err
+	}
+	data := Metric{
+		"d": self.database,
+		"a": self.apiKey,
+		"o": metricType,
+		"w": Metrics{
+			Metric{
+				"n": metric,
+				"p": Points{
+					Point{
+						"v": value,
+						"c": context,
+						"d": dimensions,
+					},
+				},
+			},
+		},
+	}
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	_, err = udpConn.Write(buf)
+	return err
+}
+
+func (self *Errplane) ReportUDP(metric string, value float64, context string, dimensions Dimensions) error {
+	return self.sendUdpPayload("r", metric, value, context, dimensions)
+}
+
+func (self *Errplane) Aggregate(metric string, value float64, context string, dimensions Dimensions) error {
+	return self.sendUdpPayload("t", metric, value, context, dimensions)
+}
+
+func (self *Errplane) Count(metric string, value int, context string, dimensions Dimensions) error {
+	return self.sendUdpPayload("c", metric, float64(value), context, dimensions)
 }
