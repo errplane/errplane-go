@@ -59,7 +59,7 @@ func (self *Errplane) Report(metric string, value float64, timestamp time.Time,
 			"n": metric,
 			"p": Points{
 				Point{
-					"t": timestamp.UnixNano() / int64(time.Millisecond),
+					"t": timestamp.Unix(),
 					"v": value,
 					"c": context,
 					"d": dimensions,
