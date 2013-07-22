@@ -37,7 +37,7 @@ func (s *ErrplaneCollectorApiSuite) SetUpSuite(c *C) {
 	listener, err = net.Listen("tcp4", "")
 	c.Assert(err, IsNil)
 	recorder = new(HttpRequestRecorder)
-	http.Handle("/databases/app4you2lovestaging/write_keys", recorder)
+	http.Handle("/databases/app4you2lovestaging/points", recorder)
 	go func() { http.Serve(listener, nil) }()
 
 	currentTime = time.Now()

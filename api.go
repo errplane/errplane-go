@@ -45,7 +45,7 @@ func newCommon(proto, httpHost, udpHost, app, environment, apiKey string) *Errpl
 	params.Set("api_key", apiKey)
 	return &Errplane{
 		database: database,
-		url:      fmt.Sprintf("%s://%s/databases/%s/write_keys?%s", proto, httpHost, database, params.Encode()),
+		url:      fmt.Sprintf("%s://%s/databases/%s/points?%s", proto, httpHost, database, params.Encode()),
 		udpHost:  udpHost,
 		apiKey:   apiKey,
 		Timeout:  1 * time.Second,
