@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"time"
+	"url"
 )
 
 type Point map[string]interface{}
@@ -40,9 +41,11 @@ func newTestClient(httpHost, udpHost, app, environment, apiKey string) *Errplane
 
 func newCommon(proto, httpHost, udpHost, app, environment, apiKey string) *Errplane {
 	database := fmt.Sprintf("%s%s", app, environment)
+	params := url.Values{}
+	params.Set("api_key", apiKey)
 	return &Errplane{
 		database: database,
-		url:      fmt.Sprintf("%s://%s/databases/%s/write_keys", proto, httpHost, database),
+		url:      fmt.Sprintf("%s://%s/databases/%s/write_keys?%s", proto, httpHost, database, params.Encode()),
 		udpHost:  udpHost,
 		apiKey:   apiKey,
 		Timeout:  1 * time.Second,
