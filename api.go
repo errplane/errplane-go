@@ -24,6 +24,12 @@ type Errplane struct {
 	Timeout  time.Duration
 }
 
+// Initializer.
+//   httpHost: the hostname of the collector (e.g. api.errplane.go)
+//   udpHost: the hostname of the aggregator (e.g. udp.errplane.go)
+//   app: the application key from the Settings/Applications page
+//   environment: the environment from the Settings/Applications page
+//   apiKey: the api key from Settings/Orginzations page
 func New(httpHost, udpHost, app, environment, apiKey string) *Errplane {
 	return newCommon("https", httpHost, udpHost, app, environment, apiKey)
 }
