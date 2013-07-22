@@ -75,7 +75,7 @@ func (self *Errplane) Report(metric string, value float64, timestamp time.Time,
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 201 {
 		return fmt.Errorf("Server returned status code %d", resp.StatusCode)
 	}
 	return nil
