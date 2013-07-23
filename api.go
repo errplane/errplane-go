@@ -52,6 +52,15 @@ func newCommon(proto, httpHost, udpHost, app, environment, apiKey string) *Errpl
 	}
 }
 
+func (self *Errplane) SetProxy(proxy string) error {
+	proxyUrl, err := url.Parse(proxy)
+	if err != nil {
+		return err
+	}
+	http.DefaultTransport = &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
+	return nil
+}
+
 // FIXME: make timestamp, context and dimensions optional (accept empty values, e.g. nil)
 func (self *Errplane) Report(metric string, value float64, timestamp time.Time,
 	context string, dimensions Dimensions) error {
