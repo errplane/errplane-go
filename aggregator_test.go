@@ -48,7 +48,8 @@ func (s *ErrplaneAggregatorApiSuite) TearDownSuite(c *C) {
 }
 
 func (s *ErrplaneAggregatorApiSuite) TestApi(c *C) {
-	ep := newTestClient("", udpListener.LocalAddr().(*net.UDPAddr).String(), "app4you2love", "staging", "some_key")
+	ep := newTestClient("app4you2love", "staging", "some_key")
+	ep.SetUdpAddr(udpListener.LocalAddr().(*net.UDPAddr).String())
 	c.Assert(ep, NotNil)
 
 	err := ep.ReportUDP("some_metric", 123.4, "some_context", Dimensions{

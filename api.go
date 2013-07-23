@@ -18,38 +18,58 @@ type UdpPayload map[string]interface{}
 type Dimensions map[string]string
 
 type Errplane struct {
+	proto    string
+	httpHost string
+	udpAddr  string
 	url      string
 	apiKey   string
 	database string
-	udpHost  string
 	Timeout  time.Duration
 }
 
+const (
+	DEFAULT_HTTP_HOST = "w.apiv3.errplane.com"
+	DEFAUL_UDP_ADDR   = "udp.apiv3.errplane.com:8126"
+)
+
 // Initializer.
-//   httpHost: the hostname of the collector (e.g. api.errplane.go)
-//   udpHost: the hostname of the aggregator (e.g. udp.errplane.go)
 //   app: the application key from the Settings/Applications page
 //   environment: the environment from the Settings/Applications page
 //   apiKey: the api key from Settings/Orginzations page
-func New(httpHost, udpHost, app, environment, apiKey string) *Errplane {
-	return newCommon("https", httpHost, udpHost, app, environment, apiKey)
+func New(app, environment, apiKey string) *Errplane {
+	return newCommon("https", app, environment, apiKey)
 }
 
-func newTestClient(httpHost, udpHost, app, environment, apiKey string) *Errplane {
-	return newCommon("http", httpHost, udpHost, app, environment, apiKey)
+func newTestClient(app, environment, apiKey string) *Errplane {
+	return newCommon("http", app, environment, apiKey)
 }
 
-func newCommon(proto, httpHost, udpHost, app, environment, apiKey string) *Errplane {
+func newCommon(proto, app, environment, apiKey string) *Errplane {
 	database := fmt.Sprintf("%s%s", app, environment)
-	params := url.Values{}
-	params.Set("api_key", apiKey)
-	return &Errplane{
+	ep := &Errplane{
+		proto:    proto,
 		database: database,
-		url:      fmt.Sprintf("%s://%s/databases/%s/points?%s", proto, httpHost, database, params.Encode()),
-		udpHost:  udpHost,
+		udpAddr:  DEFAUL_UDP_ADDR,
 		apiKey:   apiKey,
 		Timeout:  1 * time.Second,
 	}
+	return ep.initUrl()
+}
+
+func (self *Errplane) SetHttpHost(host string) {
+	self.httpHost = host
+	self.initUrl()
+}
+
+func (self *Errplane) SetUdpAddr(addr string) {
+	self.udpAddr = addr
+}
+
+func (self *Errplane) initUrl() *Errplane {
+	params := url.Values{}
+	params.Set("api_key", self.apiKey)
+	self.url = fmt.Sprintf("%s://%s/databases/%s/points?%s", self.proto, self.httpHost, self.database, params.Encode())
+	return self
 }
 
 func (self *Errplane) SetProxy(proxy string) error {
@@ -96,7 +116,7 @@ func (self *Errplane) sendUdpPayload(metricType, metric string, value float64, c
 	if err != nil {
 		return err
 	}
-	remoteAddr, err := net.ResolveUDPAddr("udp4", self.udpHost)
+	remoteAddr, err := net.ResolveUDPAddr("udp4", self.udpAddr)
 	if err != nil {
 		return err
 	}

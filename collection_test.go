@@ -48,7 +48,8 @@ func (s *ErrplaneCollectorApiSuite) TearDownSuite(c *C) {
 }
 
 func (s *ErrplaneCollectorApiSuite) TestApi(c *C) {
-	ep := newTestClient(listener.Addr().(*net.TCPAddr).String(), "", "app4you2love", "staging", "some_key")
+	ep := newTestClient("app4you2love", "staging", "some_key")
+	ep.SetHttpHost(listener.Addr().(*net.TCPAddr).String())
 	c.Assert(ep, NotNil)
 
 	ep.Report("some_metric", 123.4, currentTime, "some_context", Dimensions{
