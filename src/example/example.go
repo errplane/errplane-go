@@ -2,6 +2,7 @@ package main
 
 import (
 	errplane "../.."
+	"math/rand"
 	"os"
 	"time"
 )
@@ -14,7 +15,7 @@ const (
 )
 
 func main() {
-	ep := errplane.New("w.apiv3.errplane.com", "udp.apiv3.errplane.com", appKey, environment, apiKey)
+	ep := errplane.New("w.apiv3.errplane.com", "udp.apiv3.errplane.com:8126", appKey, environment, apiKey)
 	if proxy != "" {
 		ep.SetProxy(proxy)
 	}
@@ -23,6 +24,15 @@ func main() {
 	})
 	if err != nil {
 		panic(err)
+	}
+
+	for i := 0; i < 10; i++ {
+		value := rand.Float64() * 100
+		err = ep.Aggregate("some_aggregate", value, "", nil)
+		if err != nil {
+			panic(err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	os.Exit(0)
 }
