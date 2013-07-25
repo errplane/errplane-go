@@ -29,7 +29,7 @@ type Errplane struct {
 
 const (
 	DEFAULT_HTTP_HOST = "w.apiv3.errplane.com"
-	DEFAUL_UDP_ADDR   = "udp.apiv3.errplane.com:8126"
+	DEFAULT_UDP_ADDR  = "udp.apiv3.errplane.com:8126"
 )
 
 // Initializer.
@@ -49,7 +49,7 @@ func newCommon(proto, app, environment, apiKey string) *Errplane {
 	ep := &Errplane{
 		proto:    proto,
 		database: database,
-		udpAddr:  DEFAUL_UDP_ADDR,
+		udpAddr:  DEFAULT_UDP_ADDR,
 		apiKey:   apiKey,
 		Timeout:  1 * time.Second,
 	}
