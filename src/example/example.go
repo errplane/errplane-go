@@ -15,6 +15,8 @@ const (
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
 	ep := errplane.New(appKey, environment, apiKey)
 	if proxy != "" {
 		ep.SetProxy(proxy)
