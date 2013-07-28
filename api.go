@@ -39,6 +39,7 @@ type Errplane struct {
 	Timeout   time.Duration
 	closeChan chan bool
 	msgChan   chan *ErrplanePost
+	closed    bool
 }
 
 const (
@@ -69,6 +70,7 @@ func newCommon(proto, app, environment, apiKey string) *Errplane {
 		Timeout:   1 * time.Second,
 		msgChan:   make(chan *ErrplanePost),
 		closeChan: make(chan bool),
+		closed:    false,
 	}
 	ep.initUrl()
 	go ep.processMessages()
@@ -144,6 +146,19 @@ func (self *Errplane) flushPosts(posts []*ErrplanePost) error {
 	}
 
 	return nil
+}
+
+func (self *Errplane) heartbeat(name string, interval time.Duration) {
+	go func() {
+		for {
+			if self.closed {
+				return
+			}
+
+			self.Report(name, 1.0, time.Now(), "", nil)
+			time.Sleep(interval)
+		}
+	}()
 }
 
 func (self *Errplane) sendHttp(data Metrics) error {
