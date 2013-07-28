@@ -235,6 +235,7 @@ func (self *Errplane) Close() {
 	self.closeChan <- true
 	// wait for the go routine to finish
 	<-self.closeChan
+	self.closed = true
 }
 
 func (self *Errplane) SetHttpHost(host string) {
