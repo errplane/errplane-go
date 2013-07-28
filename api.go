@@ -148,7 +148,7 @@ func (self *Errplane) flushPosts(posts []*ErrplanePost) error {
 	return nil
 }
 
-func (self *Errplane) heartbeat(name string, interval time.Duration) {
+func (self *Errplane) Heartbeat(name string, interval time.Duration) {
 	go func() {
 		for {
 			if self.closed {
@@ -231,11 +231,11 @@ func mergeMetrics(points []Metrics) Metrics {
 
 // Close the errplane object and flush all buffered data points
 func (self *Errplane) Close() {
+	self.closed = true
 	// tell the go routine to finish
 	self.closeChan <- true
 	// wait for the go routine to finish
 	<-self.closeChan
-	self.closed = true
 }
 
 func (self *Errplane) SetHttpHost(host string) {

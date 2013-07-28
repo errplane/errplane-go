@@ -72,6 +72,24 @@ func (s *ErrplaneCollectorApiSuite) TestApi(c *C) {
 	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")
 }
 
+func (s *ErrplaneCollectorApiSuite) TestApiHeartbeat(c *C) {
+	ep := newTestClient("app4you2love", "staging", "some_key")
+	c.Assert(ep, NotNil)
+	ep.SetHttpHost(listener.Addr().(*net.TCPAddr).String())
+
+	ep.Heartbeat("heartbeat_metric", time.Second)
+	time.Sleep(1 * time.Second)
+	ep.Close() // make sure we flush all the points
+
+	c.Assert(recorder.requests, HasLen, 1)
+	epocTime := currentTime.UnixNano() / int64(time.Second)
+	expected := fmt.Sprintf(
+		`[{"n":"heartbeat_metric","p":[{"c":"","d":null,"t":%d,"v":1}]}]`, epocTime)
+	c.Assert(string(recorder.requests[0]), Equals, expected)
+	c.Assert(recorder.forms, HasLen, 1)
+	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")
+}
+
 func (s *ErrplaneCollectorApiSuite) TestApiAggregatesPoints(c *C) {
 	ep := newTestClient("app4you2love", "staging", "some_key")
 	c.Assert(ep, NotNil)
