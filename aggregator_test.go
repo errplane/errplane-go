@@ -51,6 +51,8 @@ func (s *ErrplaneAggregatorApiSuite) TearDownSuite(c *C) {
 	udpListener.Close()
 }
 
+// the purpose of this test is to make sure that we don't send empty arrays
+// to the backend which we were doing.
 func (s *ErrplaneAggregatorApiSuite) TestDoesNotSendEmptyPoints(c *C) {
 	ep := newTestClient("app4you2love", "staging", "some_key")
 	ep.SetUdpAddr(udpListener.LocalAddr().(*net.UDPAddr).String())
