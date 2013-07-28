@@ -17,14 +17,28 @@ type Metrics []Metric
 type UdpPayload map[string]interface{}
 type Dimensions map[string]string
 
+type PostType int
+
+const (
+	UDP PostType = iota
+	HTTP
+)
+
+type ErrplanePost struct {
+	postType PostType
+	data     interface{}
+}
+
 type Errplane struct {
-	proto    string
-	httpHost string
-	udpAddr  string
-	url      string
-	apiKey   string
-	database string
-	Timeout  time.Duration
+	proto     string
+	httpHost  string
+	udpAddr   string
+	url       string
+	apiKey    string
+	database  string
+	Timeout   time.Duration
+	closeChan chan bool
+	msgChan   chan *ErrplanePost
 }
 
 const (
@@ -47,13 +61,165 @@ func newTestClient(app, environment, apiKey string) *Errplane {
 func newCommon(proto, app, environment, apiKey string) *Errplane {
 	database := fmt.Sprintf("%s%s", app, environment)
 	ep := &Errplane{
-		proto:    proto,
-		database: database,
-		udpAddr:  DEFAULT_UDP_ADDR,
-		apiKey:   apiKey,
-		Timeout:  1 * time.Second,
+		httpHost:  DEFAULT_HTTP_HOST,
+		udpAddr:   DEFAULT_UDP_ADDR,
+		proto:     proto,
+		database:  database,
+		apiKey:    apiKey,
+		Timeout:   1 * time.Second,
+		msgChan:   make(chan *ErrplanePost),
+		closeChan: make(chan bool),
 	}
-	return ep.initUrl()
+	ep.initUrl()
+	go ep.processMessages()
+	return ep
+}
+
+// call from a goroutine, this method never returns
+func (self *Errplane) processMessages() {
+	posts := make([]*ErrplanePost, 0)
+	for {
+
+		select {
+		case x := <-self.msgChan:
+			posts = append(posts, x)
+			if len(posts) < 100 {
+				continue
+			}
+			self.flushPosts(posts)
+		case <-time.After(1 * time.Second):
+			self.flushPosts(posts)
+		case <-self.closeChan:
+			self.flushPosts(posts)
+			self.closeChan <- true
+			return
+		}
+
+		posts = make([]*ErrplanePost, 0)
+	}
+}
+
+func (self *Errplane) flushPosts(posts []*ErrplanePost) error {
+	if len(posts) == 0 {
+		return nil
+	}
+
+	httpPoints := make([]Metrics, 0)
+	udpReportPoints := make([]Metrics, 0)
+	udpSumPoints := make([]Metrics, 0)
+	udpAggregatePoints := make([]Metrics, 0)
+
+	for _, post := range posts {
+		if post.postType == UDP {
+			metric := post.data.(Metric)
+			switch metric["o"] {
+			case "r":
+				udpReportPoints = append(udpReportPoints, metric["w"].(Metrics))
+			case "t":
+				udpAggregatePoints = append(udpAggregatePoints, metric["w"].(Metrics))
+			case "c":
+				udpSumPoints = append(udpSumPoints, metric["w"].(Metrics))
+			}
+		} else {
+			httpPoints = append(httpPoints, post.data.(Metrics))
+		}
+	}
+
+	// do the http ones first
+	httpPoint := mergeMetrics(httpPoints)
+	self.sendHttp(httpPoint)
+
+	// do the udp points here
+	udpReportPoint := mergeMetrics(udpReportPoints)
+	if len(udpReportPoints) > 0 {
+		self.sendUdp("r", udpReportPoint)
+	}
+	udpAggregatePoint := mergeMetrics(udpAggregatePoints)
+	if len(udpAggregatePoints) > 0 {
+		self.sendUdp("t", udpAggregatePoint)
+	}
+	udpSumPoint := mergeMetrics(udpSumPoints)
+	if len(udpSumPoints) > 0 {
+		self.sendUdp("c", udpSumPoint)
+	}
+
+	return nil
+}
+
+func (self *Errplane) sendHttp(data Metrics) error {
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	resp, err := http.Post(self.url, "application/json", bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != 201 {
+		return fmt.Errorf("Server returned status code %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (self *Errplane) sendUdp(metricType string, points Metrics) error {
+	localAddr, err := net.ResolveUDPAddr("udp4", "")
+	if err != nil {
+		return err
+	}
+	remoteAddr, err := net.ResolveUDPAddr("udp4", self.udpAddr)
+	if err != nil {
+		return err
+	}
+	udpConn, err := net.DialUDP("udp4", localAddr, remoteAddr)
+	if err != nil {
+		return err
+	}
+	data := Metric{
+		"d": self.database,
+		"a": self.apiKey,
+		"o": metricType,
+		"w": points,
+	}
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	_, err = udpConn.Write(buf)
+	return err
+}
+
+func mergeMetrics(points []Metrics) Metrics {
+	metricToPoints := make(map[string]Points)
+
+	for _, metrics := range points {
+		for _, point := range metrics {
+			metric := point["n"].(string)
+			points := point["p"].(Points)
+
+			points = append(metricToPoints[metric], points...)
+			metricToPoints[metric] = points
+		}
+	}
+
+	mergedMetrics := make(Metrics, 0)
+
+	for metric, points := range metricToPoints {
+		mergedMetrics = append(mergedMetrics, Metric{
+			"n": metric,
+			"p": points,
+		})
+	}
+
+	return mergedMetrics
+}
+
+// Close the errplane object and flush all buffered data points
+func (self *Errplane) Close() {
+	// tell the go routine to finish
+	self.closeChan <- true
+	// wait for the go routine to finish
+	<-self.closeChan
 }
 
 func (self *Errplane) SetHttpHost(host string) {
@@ -97,36 +263,12 @@ func (self *Errplane) Report(metric string, value float64, timestamp time.Time,
 			},
 		},
 	}
-	buf, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	resp, err := http.Post(self.url, "application/json", bytes.NewReader(buf))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != 201 {
-		return fmt.Errorf("Server returned status code %d", resp.StatusCode)
-	}
+	self.msgChan <- &ErrplanePost{HTTP, data}
 	return nil
 }
 
 func (self *Errplane) sendUdpPayload(metricType, metric string, value float64, context string, dimensions Dimensions) error {
-	localAddr, err := net.ResolveUDPAddr("udp4", "")
-	if err != nil {
-		return err
-	}
-	remoteAddr, err := net.ResolveUDPAddr("udp4", self.udpAddr)
-	if err != nil {
-		return err
-	}
-	udpConn, err := net.DialUDP("udp4", localAddr, remoteAddr)
-	if err != nil {
-		return err
-	}
 	data := Metric{
-		"d": self.database,
-		"a": self.apiKey,
 		"o": metricType,
 		"w": Metrics{
 			Metric{
@@ -141,12 +283,8 @@ func (self *Errplane) sendUdpPayload(metricType, metric string, value float64, c
 			},
 		},
 	}
-	buf, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	_, err = udpConn.Write(buf)
-	return err
+	self.msgChan <- &ErrplanePost{UDP, data}
+	return nil
 }
 
 func (self *Errplane) ReportUDP(metric string, value float64, context string, dimensions Dimensions) error {

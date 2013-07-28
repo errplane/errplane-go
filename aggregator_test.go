@@ -17,10 +17,14 @@ var (
 )
 
 type UdpRequestRecorder struct {
-	requests [][]byte
+	requests []string
 }
 
 func (self *UdpRequestRecorder) recordRequest(conn net.Conn) {
+}
+
+func (s *ErrplaneAggregatorApiSuite) SetUpTest(c *C) {
+	udpRecorder.requests = nil
 }
 
 func (s *ErrplaneAggregatorApiSuite) SetUpSuite(c *C) {
@@ -37,7 +41,7 @@ func (s *ErrplaneAggregatorApiSuite) SetUpSuite(c *C) {
 			if err != nil || n <= 0 {
 				break
 			}
-			udpRecorder.requests = append(udpRecorder.requests, buffer[:n])
+			udpRecorder.requests = append(udpRecorder.requests, string(buffer[:n]))
 		}
 	}()
 	currentTime = time.Now()
@@ -45,6 +49,24 @@ func (s *ErrplaneAggregatorApiSuite) SetUpSuite(c *C) {
 
 func (s *ErrplaneAggregatorApiSuite) TearDownSuite(c *C) {
 	udpListener.Close()
+}
+
+func (s *ErrplaneAggregatorApiSuite) TestDoesNotSendEmptyPoints(c *C) {
+	ep := newTestClient("app4you2love", "staging", "some_key")
+	ep.SetUdpAddr(udpListener.LocalAddr().(*net.UDPAddr).String())
+	c.Assert(ep, NotNil)
+
+	err := ep.ReportUDP("some_metric", 123.4, "doesn't send empty points", Dimensions{
+		"foo": "bar",
+	})
+	c.Assert(err, IsNil)
+	ep.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	c.Assert(udpRecorder.requests, HasLen, 1)
+	expected := fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"r","w":[{"n":"some_metric","p":[{"c":"doesn't send empty points","d":{"foo":"bar"},"v":123.4}]}]}`)
+	c.Assert(udpRecorder.requests, Contains, expected)
 }
 
 func (s *ErrplaneAggregatorApiSuite) TestApi(c *C) {
@@ -57,7 +79,7 @@ func (s *ErrplaneAggregatorApiSuite) TestApi(c *C) {
 	})
 	c.Assert(err, IsNil)
 	time.Sleep(200 * time.Millisecond)
-	err = ep.Count("some_metric", 10, "some_context", Dimensions{
+	err = ep.Sum("some_metric", 10, "some_context", Dimensions{
 		"foo": "bar",
 	})
 	c.Assert(err, IsNil)
@@ -66,12 +88,15 @@ func (s *ErrplaneAggregatorApiSuite) TestApi(c *C) {
 		"foo": "bar",
 	})
 	c.Assert(err, IsNil)
+	ep.Close()
+
 	time.Sleep(200 * time.Millisecond)
+
 	c.Assert(udpRecorder.requests, HasLen, 3)
 	expected := fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"r","w":[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"v":123.4}]}]}`)
-	c.Assert(string(udpRecorder.requests[0]), Equals, expected)
+	c.Assert(udpRecorder.requests, Contains, expected)
 	expected = fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"c","w":[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"v":10}]}]}`)
-	c.Assert(string(udpRecorder.requests[1]), Equals, expected)
+	c.Assert(udpRecorder.requests, Contains, expected)
 	expected = fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"t","w":[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"v":234.5}]}]}`)
-	c.Assert(string(udpRecorder.requests[2]), Equals, expected)
+	c.Assert(udpRecorder.requests, Contains, expected)
 }

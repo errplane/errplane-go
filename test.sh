@@ -5,4 +5,4 @@ cd `dirname $0`
 
 go get launchpad.net/gocheck
 
-go test
+go test -v

@@ -43,22 +43,58 @@ func (s *ErrplaneCollectorApiSuite) SetUpSuite(c *C) {
 	currentTime = time.Now()
 }
 
+func (s *ErrplaneCollectorApiSuite) SetUpTest(c *C) {
+	recorder.requests = nil
+	recorder.forms = nil
+}
+
 func (s *ErrplaneCollectorApiSuite) TearDownSuite(c *C) {
 	listener.Close()
 }
 
 func (s *ErrplaneCollectorApiSuite) TestApi(c *C) {
 	ep := newTestClient("app4you2love", "staging", "some_key")
-	ep.SetHttpHost(listener.Addr().(*net.TCPAddr).String())
 	c.Assert(ep, NotNil)
+	ep.SetHttpHost(listener.Addr().(*net.TCPAddr).String())
 
 	ep.Report("some_metric", 123.4, currentTime, "some_context", Dimensions{
 		"foo": "bar",
 	})
+
+	ep.Close() // make sure we flush all the points
+
 	c.Assert(recorder.requests, HasLen, 1)
 	expected := fmt.Sprintf(
 		`[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"t":%d,"v":123.4}]}]`,
 		currentTime.UnixNano()/int64(time.Second))
+	c.Assert(string(recorder.requests[0]), Equals, expected)
+	c.Assert(recorder.forms, HasLen, 1)
+	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")
+}
+
+func (s *ErrplaneCollectorApiSuite) TestApiAggregatesPoints(c *C) {
+	ep := newTestClient("app4you2love", "staging", "some_key")
+	c.Assert(ep, NotNil)
+	ep.SetHttpHost(listener.Addr().(*net.TCPAddr).String())
+
+	ep.Report("some_metric", 123.4, currentTime, "some_context", Dimensions{
+		"foo": "bar",
+	})
+
+	ep.Report("some_metric", 567.8, currentTime, "different_context", Dimensions{
+		"foo": "bar",
+	})
+
+	ep.Report("different_metric", 123.4, currentTime, "some_context", Dimensions{
+		"foo": "bar",
+	})
+
+	ep.Close() // make sure we flush all the points
+
+	c.Assert(recorder.requests, HasLen, 1)
+	epocTime := currentTime.UnixNano() / int64(time.Second)
+	expected := fmt.Sprintf(
+		`[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"t":%d,"v":123.4},{"c":"different_context","d":{"foo":"bar"},"t":%d,"v":567.8}]},{"n":"different_metric","p":[{"c":"some_context","d":{"foo":"bar"},"t":%d,"v":123.4}]}]`, epocTime, epocTime, epocTime)
 	c.Assert(string(recorder.requests[0]), Equals, expected)
 	c.Assert(recorder.forms, HasLen, 1)
 	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")
