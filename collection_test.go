@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -116,4 +117,17 @@ func (s *ErrplaneCollectorApiSuite) TestApiAggregatesPoints(c *C) {
 	c.Assert(string(recorder.requests[0]), Equals, expected)
 	c.Assert(recorder.forms, HasLen, 1)
 	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")
+}
+
+func (s *ErrplaneCollectorApiSuite) TestApiRejectInvalidNames(c *C) {
+	ep := newTestClient("app4you2love", "staging", "some_key")
+	c.Assert(ep, NotNil)
+	c.Assert(ep.Report("invalid/metric/name", 1.0, time.Now(), "", nil), NotNil)
+}
+
+func (s *ErrplaneCollectorApiSuite) TestApiRejectLongMetricNames(c *C) {
+	metricName := strings.Repeat("long_metric", 100)
+	ep := newTestClient("app4you2love", "staging", "some_key")
+	c.Assert(ep, NotNil)
+	c.Assert(ep.Report(metricName, 1.0, time.Now(), "", nil), NotNil)
 }

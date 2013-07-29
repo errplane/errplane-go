@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 )
 
@@ -23,6 +24,8 @@ const (
 	UDP PostType = iota
 	HTTP
 )
+
+var METRIC_REGEX, _ = regexp.Compile("^[a-zA-Z0-9._]*$")
 
 type ErrplanePost struct {
 	postType PostType
@@ -266,6 +269,9 @@ func (self *Errplane) SetProxy(proxy string) error {
 // FIXME: make timestamp, context and dimensions optional (accept empty values, e.g. nil)
 func (self *Errplane) Report(metric string, value float64, timestamp time.Time,
 	context string, dimensions Dimensions) error {
+	if err := verifyMetricName(metric); err != nil {
+		return err
+	}
 	data := Metrics{
 		Metric{
 			"n": metric,
@@ -304,13 +310,34 @@ func (self *Errplane) sendUdpPayload(metricType, metric string, value float64, c
 }
 
 func (self *Errplane) ReportUDP(metric string, value float64, context string, dimensions Dimensions) error {
+	if err := verifyMetricName(metric); err != nil {
+		return err
+	}
 	return self.sendUdpPayload("r", metric, value, context, dimensions)
 }
 
 func (self *Errplane) Aggregate(metric string, value float64, context string, dimensions Dimensions) error {
+	if err := verifyMetricName(metric); err != nil {
+		return err
+	}
 	return self.sendUdpPayload("t", metric, value, context, dimensions)
 }
 
 func (self *Errplane) Sum(metric string, value int, context string, dimensions Dimensions) error {
+	if err := verifyMetricName(metric); err != nil {
+		return err
+	}
 	return self.sendUdpPayload("c", metric, float64(value), context, dimensions)
+}
+
+func verifyMetricName(name string) error {
+	if len(name) > 255 {
+		return fmt.Errorf("Metric names must be less than 255 characters")
+	}
+
+	if !METRIC_REGEX.MatchString(name) {
+		return fmt.Errorf("Invalid metric name %s. See docs for valid metric names", name)
+	}
+
+	return nil
 }
