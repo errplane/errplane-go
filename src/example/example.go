@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	appKey      = "app4you2love"
-	apiKey      = "962cdc9b-15e7-4b25-9a0d-24a45cfc6bc1"
-	environment = "staging"
+	appKey      = ""
+	apiKey      = ""
+	environment = ""
 	proxy       = ""
 )
 
@@ -35,6 +35,14 @@ func main() {
 	for i := 0; i < 10; i++ {
 		value := rand.Float64() * 100
 		err = ep.Aggregate("some_aggregate", value, "", nil)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		value := rand.Float64() * 100
+		err = ep.Sum("another_sum", value, "", nil)
 		if err != nil {
 			panic(err)
 		}

@@ -331,7 +331,7 @@ func (self *Errplane) Aggregate(metric string, value float64, context string, di
 	return self.sendUdpPayload("t", metric, value, context, dimensions)
 }
 
-func (self *Errplane) Sum(metric string, value int, context string, dimensions Dimensions) error {
+func (self *Errplane) Sum(metric string, value float64, context string, dimensions Dimensions) error {
 	if err := verifyMetricName(metric); err != nil {
 		return err
 	}
