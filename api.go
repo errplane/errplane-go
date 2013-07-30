@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"time"
 )
@@ -104,9 +105,9 @@ func (self *Errplane) processMessages() {
 	}
 }
 
-func (self *Errplane) flushPosts(posts []*ErrplanePost) error {
+func (self *Errplane) flushPosts(posts []*ErrplanePost) {
 	if len(posts) == 0 {
-		return nil
+		return
 	}
 
 	httpPoints := make([]Metrics, 0)
@@ -132,23 +133,29 @@ func (self *Errplane) flushPosts(posts []*ErrplanePost) error {
 
 	// do the http ones first
 	httpPoint := mergeMetrics(httpPoints)
-	self.sendHttp(httpPoint)
+	if err := self.sendHttp(httpPoint); err != nil {
+		fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
+	}
 
 	// do the udp points here
 	udpReportPoint := mergeMetrics(udpReportPoints)
 	if len(udpReportPoints) > 0 {
-		self.sendUdp("r", udpReportPoint)
+		if err := self.sendUdp("r", udpReportPoint); err != nil {
+			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
+		}
 	}
 	udpAggregatePoint := mergeMetrics(udpAggregatePoints)
 	if len(udpAggregatePoints) > 0 {
-		self.sendUdp("t", udpAggregatePoint)
+		if err := self.sendUdp("t", udpAggregatePoint); err != nil {
+			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
+		}
 	}
 	udpSumPoint := mergeMetrics(udpSumPoints)
 	if len(udpSumPoints) > 0 {
-		self.sendUdp("c", udpSumPoint)
+		if err := self.sendUdp("c", udpSumPoint); err != nil {
+			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
+		}
 	}
-
-	return nil
 }
 
 func (self *Errplane) Heartbeat(name string, interval time.Duration) {
@@ -167,8 +174,9 @@ func (self *Errplane) Heartbeat(name string, interval time.Duration) {
 func (self *Errplane) sendHttp(data Metrics) error {
 	buf, err := json.Marshal(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("Cannot marshal %#v. Error: %s", data, err)
 	}
+
 	resp, err := http.Post(self.url, "application/json", bytes.NewReader(buf))
 	if err != nil {
 		return err
@@ -200,7 +208,7 @@ func (self *Errplane) sendUdp(metricType string, points Metrics) error {
 	}
 	buf, err := json.Marshal(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("Cannot marshal %#v. Error: %s", data, err)
 	}
 
 	_, err = udpConn.Write(buf)
