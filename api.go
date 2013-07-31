@@ -44,6 +44,7 @@ type Errplane struct {
 	closeChan chan bool
 	msgChan   chan *ErrplanePost
 	closed    bool
+	timeout   time.Duration
 }
 
 const (
@@ -75,8 +76,10 @@ func newCommon(proto, app, environment, apiKey string) *Errplane {
 		msgChan:   make(chan *ErrplanePost),
 		closeChan: make(chan bool),
 		closed:    false,
+		timeout:   2 * time.Second,
 	}
 	ep.initUrl()
+	ep.setTransporter(nil)
 	go ep.processMessages()
 	return ep
 }
@@ -270,8 +273,30 @@ func (self *Errplane) SetProxy(proxy string) error {
 	if err != nil {
 		return err
 	}
-	http.DefaultTransport = &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
+	self.setTransporter(proxyUrl)
 	return nil
+}
+
+func (self *Errplane) SetTimeout(timeout time.Duration) error {
+	self.timeout = timeout
+	self.setTransporter(nil)
+	return nil
+}
+
+func (self *Errplane) setTransporter(proxyUrl *url.URL) {
+	transporter := &http.Transport{}
+	if proxyUrl != nil {
+		transporter.Proxy = http.ProxyURL(proxyUrl)
+	}
+	transporter.Dial = func(network, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(network, addr, self.timeout)
+		if err != nil {
+			return nil, err
+		}
+		conn.SetDeadline(time.Now().Add(self.timeout))
+		return conn, nil
+	}
+	http.DefaultTransport = transporter
 }
 
 // FIXME: make timestamp, context and dimensions optional (accept empty values, e.g. nil)
