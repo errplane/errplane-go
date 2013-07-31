@@ -158,14 +158,14 @@ func (self *Errplane) flushPosts(posts []*ErrplanePost) {
 	}
 }
 
-func (self *Errplane) Heartbeat(name string, interval time.Duration) {
+func (self *Errplane) Heartbeat(name string, interval time.Duration, context string, dimensions Dimensions) {
 	go func() {
 		for {
 			if self.closed {
 				return
 			}
 
-			self.Report(name, 1.0, time.Now(), "", nil)
+			self.Report(name, 1.0, time.Now(), context, dimensions)
 			time.Sleep(interval)
 		}
 	}()

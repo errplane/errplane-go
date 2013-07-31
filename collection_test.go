@@ -78,7 +78,7 @@ func (s *ErrplaneCollectorApiSuite) TestApiHeartbeat(c *C) {
 	c.Assert(ep, NotNil)
 	ep.SetHttpHost(listener.Addr().(*net.TCPAddr).String())
 
-	ep.Heartbeat("heartbeat_metric", time.Second)
+	ep.Heartbeat("heartbeat_metric", time.Second, "", nil)
 	time.Sleep(1 * time.Second)
 	ep.Close() // make sure we flush all the points
 
