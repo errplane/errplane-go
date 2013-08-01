@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 cd `dirname $0`
-. exports.sh
+. ./exports.sh
 
 go get launchpad.net/gocheck
 
