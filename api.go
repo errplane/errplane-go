@@ -155,7 +155,7 @@ func (self *Errplane) flushPosts(posts []*ErrplanePost) {
 	// do the http ones first
 	httpPoint := self.mergeMetrics(httpPoints)
 	if httpPoint != nil {
-		if err := self.sendHttp(httpPoint); err != nil {
+		if err := self.SendHttp(httpPoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
 		}
 	}
@@ -164,21 +164,21 @@ func (self *Errplane) flushPosts(posts []*ErrplanePost) {
 	udpReportPoint := self.mergeMetrics(udpReportPoints)
 	if udpReportPoint != nil {
 		udpReportPoint.Operation = "r"
-		if err := self.sendUdp(udpReportPoint); err != nil {
+		if err := self.SendUdp(udpReportPoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
 		}
 	}
 	udpAggregatePoint := self.mergeMetrics(udpAggregatePoints)
 	if udpAggregatePoint != nil {
 		udpAggregatePoint.Operation = "t"
-		if err := self.sendUdp(udpAggregatePoint); err != nil {
+		if err := self.SendUdp(udpAggregatePoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
 		}
 	}
 	udpSumPoint := self.mergeMetrics(udpSumPoints)
 	if udpSumPoint != nil {
 		udpSumPoint.Operation = "c"
-		if err := self.sendUdp(udpSumPoint); err != nil {
+		if err := self.SendUdp(udpSumPoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
 		}
 	}
@@ -197,7 +197,7 @@ func (self *Errplane) Heartbeat(name string, interval time.Duration, context str
 	}()
 }
 
-func (self *Errplane) sendHttp(data *WriteOperation) error {
+func (self *Errplane) SendHttp(data *WriteOperation) error {
 	buf, err := json.Marshal(data.Writes)
 	if err != nil {
 		return fmt.Errorf("Cannot marshal %#v. Error: %s", data, err)
@@ -213,7 +213,7 @@ func (self *Errplane) sendHttp(data *WriteOperation) error {
 	return nil
 }
 
-func (self *Errplane) sendUdp(data *WriteOperation) error {
+func (self *Errplane) SendUdp(data *WriteOperation) error {
 	localAddr, err := net.ResolveUDPAddr("udp4", "")
 	if err != nil {
 		return err
