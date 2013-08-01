@@ -66,7 +66,7 @@ func (s *ErrplaneCollectorApiSuite) TestApi(c *C) {
 
 	c.Assert(recorder.requests, HasLen, 1)
 	expected := fmt.Sprintf(
-		`[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"t":%d,"v":123.4}]}]`,
+		`[{"n":"some_metric","p":[{"v":123.4,"c":"some_context","t":%d,"d":{"foo":"bar"}}]}]`,
 		currentTime.UnixNano()/int64(time.Second))
 	c.Assert(string(recorder.requests[0]), Equals, expected)
 	c.Assert(recorder.forms, HasLen, 1)
@@ -85,7 +85,7 @@ func (s *ErrplaneCollectorApiSuite) TestApiHeartbeat(c *C) {
 	c.Assert(recorder.requests, HasLen, 1)
 	epocTime := currentTime.UnixNano() / int64(time.Second)
 	expected := fmt.Sprintf(
-		`[{"n":"heartbeat_metric","p":[{"c":"","d":null,"t":%d,"v":1}]}]`, epocTime)
+		`[{"n":"heartbeat_metric","p":[{"v":1,"t":%d}]}]`, epocTime)
 	c.Assert(string(recorder.requests[0]), Equals, expected)
 	c.Assert(recorder.forms, HasLen, 1)
 	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")
@@ -113,7 +113,7 @@ func (s *ErrplaneCollectorApiSuite) TestApiAggregatesPoints(c *C) {
 	c.Assert(recorder.requests, HasLen, 1)
 	epocTime := currentTime.UnixNano() / int64(time.Second)
 	expected := fmt.Sprintf(
-		`[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"t":%d,"v":123.4},{"c":"different_context","d":{"foo":"bar"},"t":%d,"v":567.8}]},{"n":"different_metric","p":[{"c":"some_context","d":{"foo":"bar"},"t":%d,"v":123.4}]}]`, epocTime, epocTime, epocTime)
+		`[{"n":"some_metric","p":[{"v":123.4,"c":"some_context","t":%d,"d":{"foo":"bar"}},{"v":567.8,"c":"different_context","t":%d,"d":{"foo":"bar"}}]},{"n":"different_metric","p":[{"v":123.4,"c":"some_context","t":%d,"d":{"foo":"bar"}}]}]`, epocTime, epocTime, epocTime)
 	c.Assert(string(recorder.requests[0]), Equals, expected)
 	c.Assert(recorder.forms, HasLen, 1)
 	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")

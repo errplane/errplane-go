@@ -67,7 +67,7 @@ func (s *ErrplaneAggregatorApiSuite) TestDoesNotSendEmptyPoints(c *C) {
 	time.Sleep(200 * time.Millisecond)
 
 	c.Assert(udpRecorder.requests, HasLen, 1)
-	expected := fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"r","w":[{"n":"some_metric","p":[{"c":"doesn't send empty points","d":{"foo":"bar"},"v":123.4}]}]}`)
+	expected := fmt.Sprintf(`{"d":"app4you2lovestaging","a":"some_key","o":"r","w":[{"n":"some_metric","p":[{"v":123.4,"c":"doesn't send empty points","d":{"foo":"bar"}}]}]}`)
 	c.Assert(udpRecorder.requests, Contains, expected)
 }
 
@@ -95,10 +95,10 @@ func (s *ErrplaneAggregatorApiSuite) TestApi(c *C) {
 	time.Sleep(200 * time.Millisecond)
 
 	c.Assert(udpRecorder.requests, HasLen, 3)
-	expected := fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"r","w":[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"v":123.4}]}]}`)
+	expected := fmt.Sprintf(`{"d":"app4you2lovestaging","a":"some_key","o":"r","w":[{"n":"some_metric","p":[{"v":123.4,"c":"some_context","d":{"foo":"bar"}}]}]}`)
 	c.Assert(udpRecorder.requests, Contains, expected)
-	expected = fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"c","w":[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"v":10}]}]}`)
+	expected = fmt.Sprintf(`{"d":"app4you2lovestaging","a":"some_key","o":"t","w":[{"n":"some_metric","p":[{"v":234.5,"c":"some_context","d":{"foo":"bar"}}]}]}`)
 	c.Assert(udpRecorder.requests, Contains, expected)
-	expected = fmt.Sprintf(`{"a":"some_key","d":"app4you2lovestaging","o":"t","w":[{"n":"some_metric","p":[{"c":"some_context","d":{"foo":"bar"},"v":234.5}]}]}`)
+	expected = fmt.Sprintf(`{"d":"app4you2lovestaging","a":"some_key","o":"c","w":[{"n":"some_metric","p":[{"v":10,"c":"some_context","d":{"foo":"bar"}}]}]}`)
 	c.Assert(udpRecorder.requests, Contains, expected)
 }

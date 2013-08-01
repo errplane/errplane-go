@@ -12,11 +12,25 @@ import (
 	"time"
 )
 
-type Point map[string]interface{}
-type Points []Point
-type Metric map[string]interface{}
-type Metrics []Metric
-type UdpPayload map[string]interface{}
+type WriteOperation struct {
+	Database  string        `json:"d"`
+	ApiKey    string        `json:"a"`
+	Operation string        `json:"o,omitempty"`
+	Writes    []*JsonPoints `json:"w"`
+}
+
+type JsonPoint struct {
+	Value      float64           `json:"v"`
+	Context    string            `json:"c,omitempty"`
+	Time       int64             `json:"t,omitempty"`
+	Dimensions map[string]string `json:"d,omitempty"`
+}
+
+type JsonPoints struct {
+	Name   string       `json:"n"`
+	Points []*JsonPoint `json:"p"`
+}
+
 type Dimensions map[string]string
 
 type PostType int
@@ -29,8 +43,8 @@ const (
 var METRIC_REGEX, _ = regexp.Compile("^[a-zA-Z0-9._]*$")
 
 type ErrplanePost struct {
-	postType PostType
-	data     interface{}
+	postType  PostType
+	operation *WriteOperation
 }
 
 type Errplane struct {
@@ -113,49 +127,58 @@ func (self *Errplane) flushPosts(posts []*ErrplanePost) {
 		return
 	}
 
-	httpPoints := make([]Metrics, 0)
-	udpReportPoints := make([]Metrics, 0)
-	udpSumPoints := make([]Metrics, 0)
-	udpAggregatePoints := make([]Metrics, 0)
+	var (
+		httpPoints         = make([]*WriteOperation, 0)
+		udpReportPoints    = make([]*WriteOperation, 0)
+		udpSumPoints       = make([]*WriteOperation, 0)
+		udpAggregatePoints = make([]*WriteOperation, 0)
+	)
 
 	for _, post := range posts {
+		operation := post.operation
 		if post.postType == UDP {
-			metric := post.data.(Metric)
-			switch metric["o"] {
+			switch operation.Operation {
 			case "r":
-				udpReportPoints = append(udpReportPoints, metric["w"].(Metrics))
+				udpReportPoints = append(udpReportPoints, operation)
 			case "t":
-				udpAggregatePoints = append(udpAggregatePoints, metric["w"].(Metrics))
+				udpAggregatePoints = append(udpAggregatePoints, operation)
 			case "c":
-				udpSumPoints = append(udpSumPoints, metric["w"].(Metrics))
+				udpSumPoints = append(udpSumPoints, operation)
+			default:
+				panic(fmt.Errorf("Unknown point type %s", operation.Operation))
 			}
 		} else {
-			httpPoints = append(httpPoints, post.data.(Metrics))
+			httpPoints = append(httpPoints, operation)
 		}
 	}
 
 	// do the http ones first
-	httpPoint := mergeMetrics(httpPoints)
-	if err := self.sendHttp(httpPoint); err != nil {
-		fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
+	httpPoint := self.mergeMetrics(httpPoints)
+	if httpPoint != nil {
+		if err := self.sendHttp(httpPoint); err != nil {
+			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
+		}
 	}
 
 	// do the udp points here
-	udpReportPoint := mergeMetrics(udpReportPoints)
-	if len(udpReportPoints) > 0 {
-		if err := self.sendUdp("r", udpReportPoint); err != nil {
+	udpReportPoint := self.mergeMetrics(udpReportPoints)
+	if udpReportPoint != nil {
+		udpReportPoint.Operation = "r"
+		if err := self.sendUdp(udpReportPoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
 		}
 	}
-	udpAggregatePoint := mergeMetrics(udpAggregatePoints)
-	if len(udpAggregatePoints) > 0 {
-		if err := self.sendUdp("t", udpAggregatePoint); err != nil {
+	udpAggregatePoint := self.mergeMetrics(udpAggregatePoints)
+	if udpAggregatePoint != nil {
+		udpAggregatePoint.Operation = "t"
+		if err := self.sendUdp(udpAggregatePoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
 		}
 	}
-	udpSumPoint := mergeMetrics(udpSumPoints)
-	if len(udpSumPoints) > 0 {
-		if err := self.sendUdp("c", udpSumPoint); err != nil {
+	udpSumPoint := self.mergeMetrics(udpSumPoints)
+	if udpSumPoint != nil {
+		udpSumPoint.Operation = "c"
+		if err := self.sendUdp(udpSumPoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Error while posting points to Errplane. Error: %s\n", err)
 		}
 	}
@@ -174,8 +197,8 @@ func (self *Errplane) Heartbeat(name string, interval time.Duration, context str
 	}()
 }
 
-func (self *Errplane) sendHttp(data Metrics) error {
-	buf, err := json.Marshal(data)
+func (self *Errplane) sendHttp(data *WriteOperation) error {
+	buf, err := json.Marshal(data.Writes)
 	if err != nil {
 		return fmt.Errorf("Cannot marshal %#v. Error: %s", data, err)
 	}
@@ -190,7 +213,7 @@ func (self *Errplane) sendHttp(data Metrics) error {
 	return nil
 }
 
-func (self *Errplane) sendUdp(metricType string, points Metrics) error {
+func (self *Errplane) sendUdp(data *WriteOperation) error {
 	localAddr, err := net.ResolveUDPAddr("udp4", "")
 	if err != nil {
 		return err
@@ -203,12 +226,6 @@ func (self *Errplane) sendUdp(metricType string, points Metrics) error {
 	if err != nil {
 		return err
 	}
-	data := Metric{
-		"d": self.database,
-		"a": self.apiKey,
-		"o": metricType,
-		"w": points,
-	}
 	buf, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("Cannot marshal %#v. Error: %s", data, err)
@@ -218,29 +235,34 @@ func (self *Errplane) sendUdp(metricType string, points Metrics) error {
 	return err
 }
 
-func mergeMetrics(points []Metrics) Metrics {
-	metricToPoints := make(map[string]Points)
+func (self *Errplane) mergeMetrics(operations []*WriteOperation) *WriteOperation {
+	if len(operations) == 0 {
+		return nil
+	}
 
-	for _, metrics := range points {
-		for _, point := range metrics {
-			metric := point["n"].(string)
-			points := point["p"].(Points)
+	metricToPoints := make(map[string][]*JsonPoint)
 
-			points = append(metricToPoints[metric], points...)
-			metricToPoints[metric] = points
+	for _, operation := range operations {
+		for _, jsonPoints := range operation.Writes {
+			name := jsonPoints.Name
+			metricToPoints[name] = append(metricToPoints[name], jsonPoints.Points...)
 		}
 	}
 
-	mergedMetrics := make(Metrics, 0)
+	mergedMetrics := make([]*JsonPoints, 0)
 
 	for metric, points := range metricToPoints {
-		mergedMetrics = append(mergedMetrics, Metric{
-			"n": metric,
-			"p": points,
+		mergedMetrics = append(mergedMetrics, &JsonPoints{
+			Name:   metric,
+			Points: points,
 		})
 	}
 
-	return mergedMetrics
+	return &WriteOperation{
+		Database: self.database,
+		ApiKey:   self.apiKey,
+		Writes:   mergedMetrics,
+	}
 }
 
 // Close the errplane object and flush all buffered data points
@@ -300,66 +322,50 @@ func (self *Errplane) setTransporter(proxyUrl *url.URL) {
 }
 
 // FIXME: make timestamp, context and dimensions optional (accept empty values, e.g. nil)
-func (self *Errplane) Report(metric string, value float64, timestamp time.Time,
-	context string, dimensions Dimensions) error {
-	if err := verifyMetricName(metric); err != nil {
-		return err
-	}
-	data := Metrics{
-		Metric{
-			"n": metric,
-			"p": Points{
-				Point{
-					"t": timestamp.Unix(),
-					"v": value,
-					"c": context,
-					"d": dimensions,
-				},
-			},
-		},
-	}
-	self.msgChan <- &ErrplanePost{HTTP, data}
-	return nil
+func (self *Errplane) Report(metric string, value float64, timestamp time.Time, context string, dimensions Dimensions) error {
+	return self.sendCommon("", metric, value, &timestamp, context, dimensions, HTTP)
 }
 
 func (self *Errplane) sendUdpPayload(metricType, metric string, value float64, context string, dimensions Dimensions) error {
-	data := Metric{
-		"o": metricType,
-		"w": Metrics{
-			Metric{
-				"n": metric,
-				"p": Points{
-					Point{
-						"v": value,
-						"c": context,
-						"d": dimensions,
-					},
-				},
+	return self.sendCommon(metricType, metric, value, nil, context, dimensions, UDP)
+}
+
+func (self *Errplane) sendCommon(metricType, metric string, value float64, timestamp *time.Time, context string, dimensions Dimensions, postType PostType) error {
+	if err := verifyMetricName(metric); err != nil {
+		return err
+	}
+	point := &JsonPoint{
+		Value:      value,
+		Context:    context,
+		Dimensions: dimensions,
+	}
+
+	if timestamp != nil {
+		point.Time = timestamp.Unix()
+	}
+
+	data := &WriteOperation{
+		Operation: metricType,
+		Writes: []*JsonPoints{
+			&JsonPoints{
+				Name:   metric,
+				Points: []*JsonPoint{point},
 			},
 		},
 	}
-	self.msgChan <- &ErrplanePost{UDP, data}
+	self.msgChan <- &ErrplanePost{postType, data}
 	return nil
 }
 
 func (self *Errplane) ReportUDP(metric string, value float64, context string, dimensions Dimensions) error {
-	if err := verifyMetricName(metric); err != nil {
-		return err
-	}
 	return self.sendUdpPayload("r", metric, value, context, dimensions)
 }
 
 func (self *Errplane) Aggregate(metric string, value float64, context string, dimensions Dimensions) error {
-	if err := verifyMetricName(metric); err != nil {
-		return err
-	}
 	return self.sendUdpPayload("t", metric, value, context, dimensions)
 }
 
 func (self *Errplane) Sum(metric string, value float64, context string, dimensions Dimensions) error {
-	if err := verifyMetricName(metric); err != nil {
-		return err
-	}
 	return self.sendUdpPayload("c", metric, float64(value), context, dimensions)
 }
 
