@@ -2,6 +2,7 @@
 *.org
 *.sh
 !test.sh
+!exports.sh
 src/launchpad.net/
 pkg/
 *.test
