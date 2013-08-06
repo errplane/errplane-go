@@ -207,6 +207,7 @@ func (self *Errplane) SendHttp(data *WriteOperation) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 201 {
 		return fmt.Errorf("Server returned status code %d", resp.StatusCode)
 	}
@@ -226,6 +227,7 @@ func (self *Errplane) SendUdp(data *WriteOperation) error {
 	if err != nil {
 		return err
 	}
+	defer udpConn.Close()
 	buf, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("Cannot marshal %#v. Error: %s", data, err)
