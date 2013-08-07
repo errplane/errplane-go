@@ -50,7 +50,7 @@ type ErrplanePost struct {
 type Errplane struct {
 	proto     string
 	httpHost  string
-	udpAddr   string
+	udpConn   *net.UDPConn
 	url       string
 	apiKey    string
 	database  string
@@ -82,7 +82,6 @@ func newCommon(proto, app, environment, apiKey string) *Errplane {
 	database := fmt.Sprintf("%s%s", app, environment)
 	ep := &Errplane{
 		httpHost:  DEFAULT_HTTP_HOST,
-		udpAddr:   DEFAULT_UDP_ADDR,
 		proto:     proto,
 		database:  database,
 		apiKey:    apiKey,
@@ -215,25 +214,12 @@ func (self *Errplane) SendHttp(data *WriteOperation) error {
 }
 
 func (self *Errplane) SendUdp(data *WriteOperation) error {
-	localAddr, err := net.ResolveUDPAddr("udp4", "")
-	if err != nil {
-		return err
-	}
-	remoteAddr, err := net.ResolveUDPAddr("udp4", self.udpAddr)
-	if err != nil {
-		return err
-	}
-	udpConn, err := net.DialUDP("udp4", localAddr, remoteAddr)
-	if err != nil {
-		return err
-	}
-	defer udpConn.Close()
 	buf, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("Cannot marshal %#v. Error: %s", data, err)
 	}
 
-	_, err = udpConn.Write(buf)
+	_, err = self.udpConn.Write(buf)
 	return err
 }
 
@@ -281,14 +267,32 @@ func (self *Errplane) SetHttpHost(host string) {
 	self.initUrl()
 }
 
-func (self *Errplane) SetUdpAddr(addr string) {
-	self.udpAddr = addr
+func (self *Errplane) SetUdpAddr(addr string) error {
+	if self.udpConn != nil {
+		self.udpConn.Close()
+		self.udpConn = nil
+	}
+
+	localAddr, err := net.ResolveUDPAddr("udp4", "")
+	if err != nil {
+		return err
+	}
+	remoteAddr, err := net.ResolveUDPAddr("udp4", addr)
+	if err != nil {
+		return err
+	}
+	self.udpConn, err = net.DialUDP("udp4", localAddr, remoteAddr)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (self *Errplane) initUrl() *Errplane {
 	params := url.Values{}
 	params.Set("api_key", self.apiKey)
 	self.url = fmt.Sprintf("%s://%s/databases/%s/points?%s", self.proto, self.httpHost, self.database, params.Encode())
+	self.SetUdpAddr(DEFAULT_UDP_ADDR)
 	return self
 }
 
