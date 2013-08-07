@@ -32,6 +32,7 @@ func (self *HttpRequestRecorder) ServeHTTP(writer http.ResponseWriter, req *http
 	self.requests = append(self.requests, data)
 	req.ParseForm()
 	self.forms = append(self.forms, req.Form)
+	writer.WriteHeader(http.StatusCreated)
 }
 
 func (s *ErrplaneCollectorApiSuite) SetUpSuite(c *C) {
