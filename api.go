@@ -292,7 +292,10 @@ func (self *Errplane) initUrl() *Errplane {
 	params := url.Values{}
 	params.Set("api_key", self.apiKey)
 	self.url = fmt.Sprintf("%s://%s/databases/%s/points?%s", self.proto, self.httpHost, self.database, params.Encode())
-	self.SetUdpAddr(DEFAULT_UDP_ADDR)
+	if err := self.SetUdpAddr(DEFAULT_UDP_ADDR); err != nil {
+		fmt.Fprintf(os.Stderr, "Error while creating a udp connection to '%s'. Error: %s", DEFAULT_UDP_ADDR, err)
+		return nil
+	}
 	return self
 }
 
