@@ -1,6 +1,7 @@
 package errplane
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	. "launchpad.net/gocheck"
@@ -84,9 +85,19 @@ func (s *ErrplaneCollectorApiSuite) TestApiHeartbeat(c *C) {
 
 	c.Assert(recorder.requests, HasLen, 1)
 	epocTime := currentTime.UnixNano() / int64(time.Second)
-	expected := fmt.Sprintf(
-		`[{"n":"heartbeat_metric","p":[{"v":1,"t":%d}]}]`, epocTime)
-	c.Assert(string(recorder.requests[0]), Equals, expected)
+	data := make([]*JsonPoints, 0)
+	err := json.Unmarshal(recorder.requests[0], &data)
+	c.Assert(err, IsNil)
+	c.Assert(data, HasLen, 1)
+	c.Assert(data[0].Name, Equals, "heartbeat_metric")
+	points := data[0].Points
+	c.Assert(points, HasLen, 1)
+	if points[0].Time < epocTime {
+		epocTime -= 1
+	} else if points[0].Time > epocTime {
+		epocTime += 1
+	}
+	c.Assert(points[0].Time, Equals, epocTime)
 	c.Assert(recorder.forms, HasLen, 1)
 	c.Assert(recorder.forms[0].Get("api_key"), Equals, "some_key")
 }
