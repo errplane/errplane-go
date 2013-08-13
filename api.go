@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"runtime"
 	"time"
 )
 
@@ -48,17 +49,18 @@ type ErrplanePost struct {
 }
 
 type Errplane struct {
-	proto     string
-	httpHost  string
-	udpConn   *net.UDPConn
-	url       string
-	apiKey    string
-	database  string
-	Timeout   time.Duration
-	closeChan chan bool
-	msgChan   chan *ErrplanePost
-	closed    bool
-	timeout   time.Duration
+	proto               string
+	httpHost            string
+	udpConn             *net.UDPConn
+	url                 string
+	apiKey              string
+	database            string
+	Timeout             time.Duration
+	closeChan           chan bool
+	msgChan             chan *ErrplanePost
+	closed              bool
+	timeout             time.Duration
+	runtimeStatsRunning bool
 }
 
 const (
@@ -328,6 +330,66 @@ func (self *Errplane) setTransporter(proxyUrl *url.URL) {
 		return conn, nil
 	}
 	http.DefaultTransport = transporter
+}
+
+// Start a goroutine that will post runtime stats to errplane, stats include memory usage, garbage collection, number of goroutines, etc.
+// Args:
+//   prefix: the prefix to use in the metric name
+//   context: all points will be reported with the given context name
+//   dimensions: all points will be reported with the given dimensions
+//   sleep: the sampling frequency
+func (self *Errplane) ReportRuntimeStats(prefix, context string, dimensions Dimensions, sleep time.Duration) {
+	if self.runtimeStatsRunning {
+		fmt.Fprintf(os.Stderr, "Runtime stats is already running\n")
+		return
+	}
+
+	self.runtimeStatsRunning = true
+	go self.reportRuntimeStats(prefix, context, dimensions, sleep)
+}
+
+func (self *Errplane) StopRuntimeStatsReporting(prefix, context string, dimensions Dimensions, sleep time.Duration) {
+	self.runtimeStatsRunning = false
+}
+
+func (self *Errplane) reportRuntimeStats(prefix, context string, dimensions Dimensions, sleep time.Duration) {
+	memStats := &runtime.MemStats{}
+	lastSampleTime := time.Now()
+	var lastPauseNs uint64 = 0
+	var lastNumGc uint32 = 0
+
+	nsInMs := float64(time.Millisecond)
+
+	for self.runtimeStatsRunning {
+		runtime.ReadMemStats(memStats)
+
+		now := time.Now()
+
+		self.Report(fmt.Sprintf("%s.memory.allocated", prefix), float64(memStats.Alloc), now, context, dimensions)
+		self.Report(fmt.Sprintf("%s.memory.mallocs", prefix), float64(memStats.Mallocs), now, context, dimensions)
+		self.Report(fmt.Sprintf("%s.memory.frees", prefix), float64(memStats.Frees), now, context, dimensions)
+		self.Report(fmt.Sprintf("%s.memory.gc.total_pause", prefix), float64(memStats.PauseTotalNs)/nsInMs, now, context, dimensions)
+		self.Report(fmt.Sprintf("%s.memory.heap", prefix), float64(memStats.HeapAlloc), now, context, dimensions)
+		self.Report(fmt.Sprintf("%s.memory.stack", prefix), float64(memStats.StackInuse), now, context, dimensions)
+
+		if lastPauseNs > 0 {
+			pauseSinceLastSample := memStats.PauseTotalNs - lastPauseNs
+			self.Report(fmt.Sprintf("%s.memory.gc.pause_per_second", prefix), float64(pauseSinceLastSample)/nsInMs, now, context, dimensions)
+		}
+		lastPauseNs = memStats.PauseTotalNs
+
+		if lastNumGc > 0 {
+			diff := float64(memStats.NumGC) - float64(lastNumGc)
+			diffTime := float64(now.Sub(lastSampleTime).Seconds())
+			self.Report(fmt.Sprintf("%s.memory.gc.gc_per_second", prefix), diff/diffTime, now, context, dimensions)
+		}
+
+		// keep track of the previous state
+		lastNumGc = memStats.NumGC
+		lastSampleTime = now
+
+		time.Sleep(sleep)
+	}
 }
 
 // FIXME: make timestamp, context and dimensions optional (accept empty values, e.g. nil)
