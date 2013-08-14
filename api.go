@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -382,6 +383,20 @@ func (self *Errplane) reportRuntimeStats(prefix, context string, dimensions Dime
 			diff := float64(memStats.NumGC) - float64(lastNumGc)
 			diffTime := float64(now.Sub(lastSampleTime).Seconds())
 			self.Report(fmt.Sprintf("%s.memory.gc.gc_per_second", prefix), diff/diffTime, now, context, dimensions)
+		}
+
+		// get the individual pause times
+		if memStats.NumGC > lastNumGc {
+			if memStats.NumGC-lastNumGc > 256 {
+				fmt.Fprintf(os.Stderr, "We're missing some gc pause times")
+			}
+
+			count := int(math.Min(256, float64(memStats.NumGC-lastNumGc)))
+			for i := 0; i < count; i++ {
+				idx := int((memStats.NumGC-uint32(i))+255) % 256
+				pause := float64(memStats.PauseNs[idx])
+				self.Aggregate(fmt.Sprintf("%s.memory.gc.pause", prefix), pause/nsInMs, context, dimensions)
+			}
 		}
 
 		// keep track of the previous state
