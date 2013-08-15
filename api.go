@@ -374,7 +374,7 @@ func (self *Errplane) reportRuntimeStats(prefix, context string, dimensions Dime
 
 		if lastPauseNs > 0 {
 			pauseSinceLastSample := memStats.PauseTotalNs - lastPauseNs
-			self.Report(fmt.Sprintf("%s.memory.gc.pause_per_second", prefix), float64(pauseSinceLastSample)/sleep.Seconds(), now, context, dimensions)
+			self.Report(fmt.Sprintf("%s.memory.gc.pause_per_second", prefix), float64(pauseSinceLastSample)/nsInMs/sleep.Seconds(), now, context, dimensions)
 		}
 		lastPauseNs = memStats.PauseTotalNs
 
