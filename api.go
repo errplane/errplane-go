@@ -366,6 +366,7 @@ func (self *Errplane) reportRuntimeStats(prefix, context string, dimensions Dime
 		now := time.Now()
 
 		self.Report(fmt.Sprintf("%s.goroutines", prefix), float64(runtime.NumGoroutine()), now, context, dimensions)
+		self.Report(fmt.Sprintf("%s.memory.heap.objects", prefix), float64(memStats.HeapObjects), now, context, dimensions)
 		self.Report(fmt.Sprintf("%s.memory.allocated", prefix), float64(memStats.Alloc), now, context, dimensions)
 		self.Report(fmt.Sprintf("%s.memory.mallocs", prefix), float64(memStats.Mallocs), now, context, dimensions)
 		self.Report(fmt.Sprintf("%s.memory.frees", prefix), float64(memStats.Frees), now, context, dimensions)
