@@ -375,24 +375,25 @@ func (self *Errplane) reportRuntimeStats(prefix, context string, dimensions Dime
 
 		if lastPauseNs > 0 {
 			pauseSinceLastSample := memStats.PauseTotalNs - lastPauseNs
-			self.Report(fmt.Sprintf("%s.memory.gc.pause_per_second", prefix), float64(pauseSinceLastSample)/nsInMs, now, context, dimensions)
+			self.Report(fmt.Sprintf("%s.memory.gc.pause_per_second", prefix), float64(pauseSinceLastSample)/sleep.Seconds(), now, context, dimensions)
 		}
 		lastPauseNs = memStats.PauseTotalNs
 
+		countGc := int(memStats.NumGC - lastNumGc)
 		if lastNumGc > 0 {
-			diff := float64(memStats.NumGC) - float64(lastNumGc)
-			diffTime := float64(now.Sub(lastSampleTime).Seconds())
+			diff := float64(countGc)
+			diffTime := now.Sub(lastSampleTime).Seconds()
 			self.Report(fmt.Sprintf("%s.memory.gc.gc_per_second", prefix), diff/diffTime, now, context, dimensions)
 		}
 
 		// get the individual pause times
-		if memStats.NumGC > lastNumGc {
-			if memStats.NumGC-lastNumGc > 256 {
+		if countGc > 0 {
+			if countGc > 256 {
 				fmt.Fprintf(os.Stderr, "We're missing some gc pause times")
+				countGc = 256
 			}
 
-			count := int(math.Min(256, float64(memStats.NumGC-lastNumGc)))
-			for i := 0; i < count; i++ {
+			for i := 0; i < countGc; i++ {
 				idx := int((memStats.NumGC-uint32(i))+255) % 256
 				pause := float64(memStats.PauseNs[idx])
 				self.Aggregate(fmt.Sprintf("%s.memory.gc.pause", prefix), pause/nsInMs, context, dimensions)
