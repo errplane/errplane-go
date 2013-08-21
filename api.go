@@ -50,7 +50,6 @@ type ErrplanePost struct {
 
 type Errplane struct {
 	proto               string
-	httpHost            string
 	udpConn             *net.UDPConn
 	url                 string
 	apiKey              string
@@ -83,7 +82,6 @@ func newTestClient(app, environment, apiKey string) *Errplane {
 func newCommon(proto, app, environment, apiKey string) *Errplane {
 	database := fmt.Sprintf("%s%s", app, environment)
 	ep := &Errplane{
-		httpHost:  DEFAULT_HTTP_HOST,
 		proto:     proto,
 		database:  database,
 		apiKey:    apiKey,
@@ -93,7 +91,8 @@ func newCommon(proto, app, environment, apiKey string) *Errplane {
 		closed:    false,
 		timeout:   2 * time.Second,
 	}
-	ep.initUrl()
+	ep.SetHttpHost(DEFAULT_HTTP_HOST)
+	ep.SetUdpAddr(DEFAULT_UDP_ADDR)
 	ep.setTransporter(nil)
 	go ep.processMessages()
 	return ep
@@ -264,17 +263,7 @@ func (self *Errplane) Close() {
 	<-self.closeChan
 }
 
-func (self *Errplane) SetHttpHost(host string) {
-	self.httpHost = host
-	self.initUrl()
-}
-
 func (self *Errplane) SetUdpAddr(addr string) error {
-	if self.udpConn != nil {
-		self.udpConn.Close()
-		self.udpConn = nil
-	}
-
 	localAddr, err := net.ResolveUDPAddr("udp4", "")
 	if err != nil {
 		return err
@@ -283,22 +272,21 @@ func (self *Errplane) SetUdpAddr(addr string) error {
 	if err != nil {
 		return err
 	}
-	self.udpConn, err = net.DialUDP("udp4", localAddr, remoteAddr)
+	udpConn, err := net.DialUDP("udp4", localAddr, remoteAddr)
 	if err != nil {
 		return err
 	}
+	if self.udpConn != nil {
+		self.udpConn.Close()
+	}
+	self.udpConn = udpConn
 	return nil
 }
 
-func (self *Errplane) initUrl() *Errplane {
+func (self *Errplane) SetHttpHost(host string) {
 	params := url.Values{}
 	params.Set("api_key", self.apiKey)
-	self.url = fmt.Sprintf("%s://%s/databases/%s/points?%s", self.proto, self.httpHost, self.database, params.Encode())
-	if err := self.SetUdpAddr(DEFAULT_UDP_ADDR); err != nil {
-		fmt.Fprintf(os.Stderr, "Error while creating a udp connection to '%s'. Error: %s", DEFAULT_UDP_ADDR, err)
-		return nil
-	}
-	return self
+	self.url = fmt.Sprintf("%s://%s/databases/%s/points?%s", self.proto, host, self.database, params.Encode())
 }
 
 func (self *Errplane) SetProxy(proxy string) error {
